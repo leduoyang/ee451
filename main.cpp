@@ -145,8 +145,9 @@ void *consumer(void *arg) {
             break;
         }
         for (const auto &log: batch) {
-            std::this_thread::sleep_for(std::chrono::microseconds(10));
-            // std::cout << "Consumer " << consumerArg->consumerIndex << " processed log: " << log << std::endl;
+            for (const char &ch : log) {
+                // Process each character 'ch' in 'log'
+            }
         }
     }
     return nullptr;

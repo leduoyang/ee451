@@ -5,7 +5,6 @@
 #include <chrono>
 #include <thread>
 
-// Total execution time (serial): 132.8 seconds
 
 // Function to load logs from a file into a vector
 std::vector<std::string> loadLogs(const std::string &filename) {
@@ -27,7 +26,10 @@ std::vector<std::string> loadLogs(const std::string &filename) {
 void processLog(const std::string &log) {
     // Simulate processing the log (e.g., parsing, analysis, etc.)
 //    std::cout << "Processed log: " << log << std::endl;
-    std::this_thread::sleep_for(std::chrono::microseconds(10));
+//    std::this_thread::sleep_for(std::chrono::microseconds(10));
+    for (const char &ch : log) {
+        // Process each character 'ch' in 'log'
+    }
 }
 
 int main() {
