@@ -10,11 +10,14 @@
  * # of consumers
  * # of partitions
  */
-const int NUM_PRODUCERS = 1;
-const int NUM_CONSUMERS = 1;
-const int NUM_PARTITIONS = 1;
+const int NUM_PRODUCERS = 10;
+const int NUM_CONSUMERS = 4;
+const int NUM_PARTITIONS = 4;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
+
+const int PRODUCER_BATCH_SIZE = 100;
+const int CONSUMER_BATCH_SIZE = 100;
 
 struct Partition {
     std::queue<std::string> queue;
@@ -48,7 +51,7 @@ std::vector<std::string> loadLogs(const std::string &filename) {
 }
 
 class MessageQueueManager {
-    std::vector<Partition>& partitions;
+    std::vector<Partition> &partitions;
 
 public:
     MessageQueueManager(std::vector<Partition> &partitions) : partitions(partitions) {
@@ -64,6 +67,17 @@ public:
         // pthread_cond_broadcast(&partition.cond_consume);
         pthread_mutex_unlock(&partition.mutex);
         return true;
+    }
+
+    void pushBatch(const std::vector<std::string> &dataBatch) {
+        size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
+        Partition &partition = partitions[partitionIndex];
+        pthread_mutex_lock(&partition.mutex);
+        for (const auto &log: dataBatch) {
+            partition.queue.push(log);
+        }
+        pthread_cond_signal(&partition.cond_consume);
+        pthread_mutex_unlock(&partition.mutex);
     }
 
     std::string retrieve(int partitionIndex) {
@@ -90,6 +104,32 @@ public:
         return data;
     }
 
+    std::vector<std::string> retrieveBatch(int partitionIndex) {
+        std::vector<std::string> batch;
+        Partition &partition = partitions[partitionIndex];
+        pthread_mutex_lock(&partition.mutex);
+        while (partition.queue.empty()) {
+            pthread_mutex_lock(&producersFinishedMutex);
+            if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
+                std::cout << "escape" << std::endl;
+                pthread_mutex_unlock(&producersFinishedMutex);
+                pthread_mutex_unlock(&partition.mutex);
+                return batch;
+            }
+            pthread_mutex_unlock(&producersFinishedMutex);
+            pthread_cond_wait(&partition.cond_consume, &partition.mutex);
+            std::cout << "busy waiting" << std::endl;
+        }
+        if (!partition.queue.empty()) {
+            for (int i = 0; i < CONSUMER_BATCH_SIZE && !partition.queue.empty(); ++i) {
+                batch.push_back(partition.queue.front());
+                partition.queue.pop(); // Consumers still pop from the queue in this version
+            }
+        }
+        pthread_mutex_unlock(&partition.mutex);
+        return batch;
+    }
+
     void broadcast() {
         std::cout << "broadcast in" << std::endl;
         pthread_mutex_lock(&producersFinishedMutex);
@@ -106,9 +146,12 @@ void *producer(void *arg) {
     MessageQueue *mq = static_cast<MessageQueue *>(arg);
     MessageQueueManager manager(mq->partitions);
     std::vector<std::string> logs = loadLogs("apache.log");
-    for (const auto &log: logs) {
-        std::cout << log << std::endl;
-        manager.push(log);
+    for (size_t i = 0; i < logs.size(); i += PRODUCER_BATCH_SIZE) {
+        std::vector<std::string> batch;
+        for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < logs.size(); ++j) {
+            batch.push_back(logs[j]);
+        }
+        manager.pushBatch(batch); // Push the entire batch at once
     }
     pthread_mutex_lock(&producersFinishedMutex);
     NUM_PRODUCERS_FINISHED += 1;
@@ -125,11 +168,13 @@ void *consumer(void *arg) {
 
     int partitionIndex = consumerArg->consumerIndex % mq->partitions.size();
     while (true) {
-        std::string data = manager.retrieve(partitionIndex);
-        if (data.empty()) {
+        std::vector<std::string> batch = manager.retrieveBatch(partitionIndex);
+        if (batch.empty()) {
             break;
         }
-        std::cout << "Consumer " << consumerArg->consumerIndex << " processed log: " << data << std::endl;
+        for (const auto &log: batch) {
+            std::cout << "Consumer " << consumerArg->consumerIndex << " processed log: " << log << std::endl;
+        }
     }
     return nullptr;
 }
