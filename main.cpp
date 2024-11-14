@@ -10,14 +10,16 @@
  * # of consumers
  * # of partitions
  */
-const int NUM_PRODUCERS = 10;
-const int NUM_CONSUMERS = 4;
-const int NUM_PARTITIONS = 4;
+const int NUM_PRODUCERS = 2;
+const int NUM_CONSUMERS = 8;
+const int NUM_PARTITIONS = 8;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
 const int PRODUCER_BATCH_SIZE = 100;
 const int CONSUMER_BATCH_SIZE = 100;
+std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 
 struct Partition {
     size_t consumerIndex = 0;
@@ -61,6 +63,9 @@ public:
 
     void pushBatch(const std::vector<std::string> &dataBatch) {
         size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
+        pthread_mutex_lock(&partitionCollectorMutex);
+        partitionNum[partitionIndex] += dataBatch.size();
+        pthread_mutex_unlock(&partitionCollectorMutex);
         // std::cout << partitionIndex << std::endl;
         Partition &partition = partitions[partitionIndex];
         pthread_mutex_lock(&partition.queueMutex);
@@ -112,7 +117,7 @@ public:
 void *producer(void *arg) {
     MessageQueue *mq = static_cast<MessageQueue *>(arg);
     MessageQueueManager manager(mq->partitions);
-    std::vector<std::string> logs = loadLogs("apache-test.log");
+    std::vector<std::string> logs = loadLogs("apache.log");
     for (size_t i = 0; i < logs.size(); i += PRODUCER_BATCH_SIZE) {
         std::vector<std::string> batch;
         for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < logs.size(); ++j) {
@@ -139,7 +144,7 @@ void *consumer(void *arg) {
             break;
         }
         for (const auto &log: batch) {
-            std::cout << "Consumer " << consumerArg->consumerIndex << " processed log: " << log << std::endl;
+            // std::cout << "Consumer " << consumerArg->consumerIndex << " processed log: " << log << std::endl;
         }
     }
     return nullptr;
@@ -180,5 +185,8 @@ int main() {
 
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Total execution time: " << elapsed.count() << " seconds" << std::endl;
+    for (size_t i = 0; i < partitionNum.size(); ++i) {
+        std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
+    }
     return 0;
 }
