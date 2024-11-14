@@ -20,8 +20,10 @@ const int PRODUCER_BATCH_SIZE = 100;
 const int CONSUMER_BATCH_SIZE = 100;
 
 struct Partition {
+    size_t consumerIndex = 0;
     std::queue<std::string> queue;
-    pthread_mutex_t mutex;
+    pthread_mutex_t queueMutex;
+    pthread_mutex_t indexMutex;
     pthread_cond_t cond_produce;
     pthread_cond_t cond_consume;
 };
@@ -57,76 +59,41 @@ public:
     MessageQueueManager(std::vector<Partition> &partitions) : partitions(partitions) {
     }
 
-    bool push(const std::string &data) {
-        size_t partitionIndex = std::hash<std::string>{}(data) % partitions.size();
-        Partition &partition = partitions[partitionIndex];
-
-        pthread_mutex_lock(&partition.mutex);
-        partition.queue.push(data);
-        pthread_cond_signal(&partition.cond_consume);
-        // pthread_cond_broadcast(&partition.cond_consume);
-        pthread_mutex_unlock(&partition.mutex);
-        return true;
-    }
-
     void pushBatch(const std::vector<std::string> &dataBatch) {
         size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
+        // std::cout << partitionIndex << std::endl;
         Partition &partition = partitions[partitionIndex];
-        pthread_mutex_lock(&partition.mutex);
+        pthread_mutex_lock(&partition.queueMutex);
         for (const auto &log: dataBatch) {
             partition.queue.push(log);
         }
         pthread_cond_signal(&partition.cond_consume);
-        pthread_mutex_unlock(&partition.mutex);
+        pthread_mutex_unlock(&partition.queueMutex);
     }
 
-    std::string retrieve(int partitionIndex) {
-        std::string data = "";
-        Partition &partition = partitions[partitionIndex];
-        pthread_mutex_lock(&partition.mutex);
-        while (partition.queue.empty()) {
-            pthread_mutex_lock(&producersFinishedMutex);
-            if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
-                std::cout << "escape" << std::endl;
-                pthread_mutex_unlock(&producersFinishedMutex);
-                pthread_mutex_unlock(&partition.mutex);
-                return "";
-            }
-            pthread_mutex_unlock(&producersFinishedMutex);
-            pthread_cond_wait(&partition.cond_consume, &partition.mutex);
-            std::cout << "busy waiting" << std::endl;
-        }
-        if (!partition.queue.empty()) {
-            data = partition.queue.front();
-            partition.queue.pop();
-        }
-        pthread_mutex_unlock(&partition.mutex);
-        return data;
-    }
-
-    std::vector<std::string> retrieveBatch(int partitionIndex) {
+    std::vector<std::string> retrieveBatchByIndex(int partitionIndex) {
         std::vector<std::string> batch;
         Partition &partition = partitions[partitionIndex];
-        pthread_mutex_lock(&partition.mutex);
-        while (partition.queue.empty()) {
+        pthread_mutex_lock(&partition.indexMutex);
+        while (partition.consumerIndex == partition.queue.size()) {
             pthread_mutex_lock(&producersFinishedMutex);
             if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
                 std::cout << "escape" << std::endl;
                 pthread_mutex_unlock(&producersFinishedMutex);
-                pthread_mutex_unlock(&partition.mutex);
+                pthread_mutex_unlock(&partition.indexMutex);
                 return batch;
             }
             pthread_mutex_unlock(&producersFinishedMutex);
-            pthread_cond_wait(&partition.cond_consume, &partition.mutex);
             std::cout << "busy waiting" << std::endl;
+            pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
         }
-        if (!partition.queue.empty()) {
-            for (int i = 0; i < CONSUMER_BATCH_SIZE && !partition.queue.empty(); ++i) {
-                batch.push_back(partition.queue.front());
-                partition.queue.pop(); // Consumers still pop from the queue in this version
-            }
+        size_t availableLogs = partition.queue.size() - partition.consumerIndex;
+        size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
+        partition.consumerIndex += logsToRetrieve;
+        pthread_mutex_unlock(&partition.indexMutex);
+        for (int i = 0; i < logsToRetrieve; ++i) {
+            batch.push_back(partition.queue.front());
         }
-        pthread_mutex_unlock(&partition.mutex);
         return batch;
     }
 
@@ -145,7 +112,7 @@ public:
 void *producer(void *arg) {
     MessageQueue *mq = static_cast<MessageQueue *>(arg);
     MessageQueueManager manager(mq->partitions);
-    std::vector<std::string> logs = loadLogs("apache.log");
+    std::vector<std::string> logs = loadLogs("apache-test.log");
     for (size_t i = 0; i < logs.size(); i += PRODUCER_BATCH_SIZE) {
         std::vector<std::string> batch;
         for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < logs.size(); ++j) {
@@ -161,14 +128,13 @@ void *producer(void *arg) {
 }
 
 void *consumer(void *arg) {
-    std::cout << "consumer in" << std::endl;
     ConsumerArg *consumerArg = static_cast<ConsumerArg *>(arg);
     MessageQueue *mq = consumerArg->mq;
     MessageQueueManager manager(mq->partitions);
 
     int partitionIndex = consumerArg->consumerIndex % mq->partitions.size();
     while (true) {
-        std::vector<std::string> batch = manager.retrieveBatch(partitionIndex);
+        std::vector<std::string> batch = manager.retrieveBatchByIndex(partitionIndex);
         if (batch.empty()) {
             break;
         }
@@ -183,7 +149,8 @@ int main() {
     // initialize a message queue with specific number of partitions based on the number of consumers
     std::vector<Partition> partitions(NUM_PARTITIONS);
     for (auto &partition: partitions) {
-        partition.mutex = PTHREAD_MUTEX_INITIALIZER;
+        partition.queueMutex = PTHREAD_MUTEX_INITIALIZER;
+        partition.indexMutex = PTHREAD_MUTEX_INITIALIZER;
         partition.cond_produce = PTHREAD_COND_INITIALIZER;
         partition.cond_consume = PTHREAD_COND_INITIALIZER;
     }
