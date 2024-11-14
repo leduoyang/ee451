@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <chrono>
+#include <thread>
 
 // Total execution time (serial): 132.8 seconds
 
@@ -25,7 +26,8 @@ std::vector<std::string> loadLogs(const std::string &filename) {
 // Function to process logs (simulated by printing the log)
 void processLog(const std::string &log) {
     // Simulate processing the log (e.g., parsing, analysis, etc.)
-    std::cout << "Processed log: " << log << std::endl;
+//    std::cout << "Processed log: " << log << std::endl;
+    std::this_thread::sleep_for(std::chrono::microseconds(10));
 }
 
 int main() {
@@ -33,6 +35,7 @@ int main() {
     // Start the timer
     auto start = std::chrono::high_resolution_clock::now();
 
+    int count = 0;
     // Load logs from the file
     for(int i = 0; i < NUM_PRODUCERS; i++) {
         std::vector<std::string> logs = loadLogs("apache.log");
@@ -40,8 +43,10 @@ int main() {
         // Process each log sequentially
         for (const auto &log : logs) {
             processLog(log);
+            count += 1;
         }
     }
+    std::cout << "total has " << count << " elements.\n";
 
     // End the timer
     auto end = std::chrono::high_resolution_clock::now();

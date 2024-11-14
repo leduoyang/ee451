@@ -5,14 +5,15 @@
 #include <string>
 #include <pthread.h>
 #include <chrono>
+#include <thread>
 
 /* # of producers
  * # of consumers
  * # of partitions
  */
-const int NUM_PRODUCERS = 2;
-const int NUM_CONSUMERS = 8;
-const int NUM_PARTITIONS = 8;
+const int NUM_PRODUCERS = 32;
+const int NUM_CONSUMERS = 6;
+const int NUM_PARTITIONS = 6;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -66,7 +67,7 @@ public:
         pthread_mutex_lock(&partitionCollectorMutex);
         partitionNum[partitionIndex] += dataBatch.size();
         pthread_mutex_unlock(&partitionCollectorMutex);
-        // std::cout << partitionIndex << std::endl;
+        std::cout << partitionIndex << std::endl;
         Partition &partition = partitions[partitionIndex];
         pthread_mutex_lock(&partition.queueMutex);
         for (const auto &log: dataBatch) {
@@ -144,6 +145,7 @@ void *consumer(void *arg) {
             break;
         }
         for (const auto &log: batch) {
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
             // std::cout << "Consumer " << consumerArg->consumerIndex << " processed log: " << log << std::endl;
         }
     }
@@ -185,8 +187,11 @@ int main() {
 
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Total execution time: " << elapsed.count() << " seconds" << std::endl;
+    int count = 0;
     for (size_t i = 0; i < partitionNum.size(); ++i) {
         std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
+        count += partitionNum[i];
     }
+    std::cout << "total has " << count << " elements.\n";
     return 0;
 }
