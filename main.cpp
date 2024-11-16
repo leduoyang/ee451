@@ -22,6 +22,7 @@ const int PRODUCER_BATCH_SIZE = 100;
 const int CONSUMER_BATCH_SIZE = 100;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
+int busyWaitingNum = 0;
 
 struct Partition {
     size_t consumerIndex = 0;
@@ -104,6 +105,7 @@ public:
             }
             pthread_mutex_unlock(&producersFinishedMutex);
             std::cout << "busy waiting" << std::endl;
+            busyWaitingNum += 1;
             pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
         }
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
@@ -169,8 +171,8 @@ void *consumer(void *arg) {
         size_t maxAvailableLogs = latestPartitionSize > latestPartitionIndex
                                       ? latestPartitionSize - latestPartitionIndex
                                       : 0;
+        // Re-balance: Find a better partition
         if (latestPartitionSize - latestPartitionIndex < batch.size()) {
-            // Re-balance: Find a better partition
             size_t nextPartitionIndex = partitionIndex;
             for (size_t i = 0; i < mq->partitions.size(); i++) {
                 size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
@@ -237,5 +239,6 @@ int main() {
         count += consumerNum[i];
     }
     std::cout << "total has " << count << " elements.\n";
+    std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
     return 0;
 }
