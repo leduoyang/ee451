@@ -145,9 +145,32 @@ void *consumer(void *arg) {
             break;
         }
         for (const auto &log: batch) {
-            for (const char &ch : log) {
+            for (const char &ch: log) {
                 // Process each character 'ch' in 'log'
             }
+        }
+
+        size_t latestPartitionSize = mq->partitions[partitionIndex].queue.size();
+        size_t latestPartitionIndex = mq->partitions[partitionIndex].consumerIndex;
+        size_t maxAvailableLogs = latestPartitionSize > latestPartitionIndex
+                                      ? latestPartitionSize - latestPartitionIndex
+                                      : 0;
+        if (latestPartitionSize - latestPartitionIndex < batch.size()) {
+            // Re-balance: Find a better partition
+            size_t nextPartitionIndex = partitionIndex;
+            for (size_t i = 0; i < mq->partitions.size(); i++) {
+                size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
+                size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
+                size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
+                size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
+                                                    ? candidateQueueSize - candidateQueueIndex
+                                                    : 0;
+                if (candidateAvailableLogs > maxAvailableLogs) {
+                    nextPartitionIndex = candidateIndex;
+                    maxAvailableLogs = candidateAvailableLogs;
+                }
+            }
+            partitionIndex = nextPartitionIndex;
         }
     }
     return nullptr;
