@@ -21,6 +21,7 @@ pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 const int PRODUCER_BATCH_SIZE = 100;
 const int CONSUMER_BATCH_SIZE = 100;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
+std::vector<int> consumerNum(NUM_CONSUMERS, 0);
 
 struct Partition {
     size_t consumerIndex = 0;
@@ -67,7 +68,6 @@ public:
         pthread_mutex_lock(&partitionCollectorMutex);
         partitionNum[partitionIndex] += dataBatch.size();
         pthread_mutex_unlock(&partitionCollectorMutex);
-        std::cout << partitionIndex << std::endl;
         Partition &partition = partitions[partitionIndex];
         pthread_mutex_lock(&partition.queueMutex);
         for (const auto &log: dataBatch) {
@@ -149,6 +149,7 @@ void *consumer(void *arg) {
                 // Process each character 'ch' in 'log'
             }
         }
+        consumerNum[consumerArg->consumerIndex] += batch.size();
 
         size_t latestPartitionSize = mq->partitions[partitionIndex].queue.size();
         size_t latestPartitionIndex = mq->partitions[partitionIndex].consumerIndex;
@@ -215,6 +216,12 @@ int main() {
     for (size_t i = 0; i < partitionNum.size(); ++i) {
         std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
         count += partitionNum[i];
+    }
+    std::cout << "total has " << count << " elements.\n";
+    count = 0;
+    for (size_t i = 0; i < consumerNum.size(); ++i) {
+        std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
+        count += consumerNum[i];
     }
     std::cout << "total has " << count << " elements.\n";
     return 0;
