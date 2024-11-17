@@ -7,7 +7,7 @@
 
 
 // Function to load logs from a file into a vector
-std::vector<std::string> loadLogs(const std::string &filename) {
+std::vector<std::string> loadLogs(const std::string &filename, const int num) {
     std::vector<std::string> logs;
     std::ifstream file(filename);
     if (!file) {
@@ -15,8 +15,13 @@ std::vector<std::string> loadLogs(const std::string &filename) {
         return logs;
     }
     std::string line;
+    int count = 0;
     while (std::getline(file, line)) {
         logs.push_back(line);
+        count += 1;
+        if(count == num) {
+          break;
+        }
     }
     file.close();
     return logs;
@@ -33,29 +38,31 @@ void processLog(const std::string &log) {
 }
 
 int main() {
-    const int NUM_PRODUCERS = 32;
-    // Start the timer
-    auto start = std::chrono::high_resolution_clock::now();
+    std::vector<double> elapsedTimes;
+    std::vector<double> throughputs;
+    std::vector<double> latencies;
 
-    int count = 0;
-    // Load logs from the file
-    for(int i = 0; i < NUM_PRODUCERS; i++) {
-        std::vector<std::string> logs = loadLogs("apache.log");
-
+    for (int num = 1000000; num <= 10000000; num += 1000000) {
+        auto start = std::chrono::high_resolution_clock::now();
+        std::vector<std::string> logs = loadLogs("apache.log", num);
         // Process each log sequentially
         for (const auto &log : logs) {
             processLog(log);
-            count += 1;
         }
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        elapsedTimes.push_back(elapsed.count());
+        std::cout << "Total execution time: " << elapsed.count() << " seconds" << std::endl;
+        double throughput = num / elapsed.count();
+        double latency = elapsed.count() / num;
+        throughputs.push_back(throughput);
+        latencies.push_back(latency);
     }
-    std::cout << "total has " << count << " elements.\n";
-
-    // End the timer
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-
-    // Print total execution time
-    std::cout << "Total execution time (serial): " << elapsed.count() << " seconds" << std::endl;
-
+    std::cout << "Elapsed times for all iterations:" << std::endl;
+    for (size_t i = 0; i < elapsedTimes.size(); ++i) {
+        std::cout << "Execution Time: " << elapsedTimes[i] << " ms\n";
+        std::cout << "Throughput: " << throughputs[i] << " operations/second\n";
+        std::cout << "Latency: " << latencies[i] << " seconds/operation\n\n";
+    }
     return 0;
 }
