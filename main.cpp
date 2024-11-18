@@ -18,8 +18,8 @@ int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
-const int PRODUCER_BATCH_SIZE = 100;
-const int CONSUMER_BATCH_SIZE = 100;
+const int PRODUCER_BATCH_SIZE = 10000;
+const int CONSUMER_BATCH_SIZE = 10000;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
 int busyWaitingNum = 0;
