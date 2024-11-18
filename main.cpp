@@ -100,7 +100,7 @@ public:
         for (const auto &log: dataBatch) {
             partition.queue.push(log);
         }
-        pthread_cond_signal(&partition.cond_consume);
+        // pthread_cond_signal(&partition.cond_consume);
         pthread_mutex_unlock(&partition.queueMutex);
     }
 
@@ -108,7 +108,7 @@ public:
         std::vector<std::string> batch;
         Partition &partition = partitions[partitionIndex];
         pthread_mutex_lock(&partition.indexMutex);
-        while (partition.consumerIndex == partition.queue.size()) {
+        while (partition.queue.size() - partition.consumerIndex < CONSUMER_BATCH_SIZE) {
             pthread_mutex_lock(&producersFinishedMutex);
             if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
                 // std::cout << "escape" << std::endl;
@@ -119,7 +119,7 @@ public:
             pthread_mutex_unlock(&producersFinishedMutex);
             // std::cout << "busy waiting" << std::endl;
             busyWaitingNum += 1;
-            pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
+            //pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
         }
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
         size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
@@ -192,22 +192,22 @@ void *consumer(void *arg) {
                                       ? latestPartitionSize - latestPartitionIndex
                                       : 0;
         // Re-balance: Find a better partition
-        if (latestPartitionSize - latestPartitionIndex < batch.size()) {
-            size_t nextPartitionIndex = partitionIndex;
-            for (size_t i = 0; i < mq->partitions.size(); i++) {
-                size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
-                size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
-                size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
-                size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
-                                                    ? candidateQueueSize - candidateQueueIndex
-                                                    : 0;
-                if (candidateAvailableLogs > maxAvailableLogs) {
-                    nextPartitionIndex = candidateIndex;
-                    maxAvailableLogs = candidateAvailableLogs;
-                }
-            }
-            partitionIndex = nextPartitionIndex;
-        }
+        // if (latestPartitionSize - latestPartitionIndex < batch.size()) {
+        //     size_t nextPartitionIndex = partitionIndex;
+        //     for (size_t i = 0; i < mq->partitions.size(); i++) {
+        //         size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
+        //         size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
+        //         size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
+        //         size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
+        //                                             ? candidateQueueSize - candidateQueueIndex
+        //                                             : 0;
+        //         if (candidateAvailableLogs > maxAvailableLogs) {
+        //             nextPartitionIndex = candidateIndex;
+        //             maxAvailableLogs = candidateAvailableLogs;
+        //         }
+        //     }
+        //     partitionIndex = nextPartitionIndex;
+        // }
     }
     return nullptr;
 }
