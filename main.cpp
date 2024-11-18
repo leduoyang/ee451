@@ -113,6 +113,9 @@ public:
             if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
                 // std::cout << "escape" << std::endl;
                 pthread_mutex_unlock(&producersFinishedMutex);
+                if(partition.queue.size() - partition.consumerIndex != 0) {
+                    break;
+                }
                 pthread_mutex_unlock(&partition.indexMutex);
                 return batch;
             }
