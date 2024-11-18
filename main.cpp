@@ -217,7 +217,12 @@ int main(int argc, char *argv[]) {
         partition.cond_consume = PTHREAD_COND_INITIALIZER;
     }
     MessageQueue messageQueue{partitions};
-    loadLogs("Android.log");
+    if (argc == 2) {
+        int NUM_LOGS = std::stoi(argv[1]);
+        if (NUM_LOGS < globalLogs.size()) {
+            globalLogs.resize(NUM_LOGS);
+        }
+    }
     auto start = std::chrono::high_resolution_clock::now();
 
     std::vector<pthread_t> producerThreads(NUM_PRODUCERS);

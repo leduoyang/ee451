@@ -96,6 +96,12 @@ int main(int argc, char *argv[]) {
     std::vector<Partition> partitions(NUM_PARTITIONS);
     MessageQueueManager manager(partitions);
     loadLogs("Android.log");
+    if (argc == 2) {
+        int NUM_LOGS = std::stoi(argv[1]);
+        if (NUM_LOGS < globalLogs.size()) {
+            globalLogs.resize(NUM_LOGS);
+        }
+    }
     auto start = std::chrono::high_resolution_clock::now();
 
     // Sequentially process logs (producer + consumer logic combined)
