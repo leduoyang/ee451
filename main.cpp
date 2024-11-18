@@ -11,9 +11,9 @@
  * # of consumers
  * # of partitions
  */
-int NUM_PRODUCERS = 16;
-int NUM_CONSUMERS = 16;
-int NUM_PARTITIONS = 16;
+int NUM_PRODUCERS = 256;
+int NUM_CONSUMERS = 256;
+int NUM_PARTITIONS = 64;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -270,18 +270,17 @@ int main(int argc, char *argv[]) {
     std::cout << "Latency: " << latency << " seconds/operation\n";
     std::cout << "number of producers: " << NUM_PRODUCERS << "\n";
     std::cout << "number of consumers: " << NUM_CONSUMERS << "\n";
-    // int count = 0;
-    // for (size_t i = 0; i < partitionNum.size(); ++i) {
-    //     std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
-    //     count += partitionNum[i];
-    // }
-    // std::cout << "total has " << count << " elements.\n";
-    // count = 0;
-    // for (size_t i = 0; i < consumerNum.size(); ++i) {
-    //     std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
-    //     count += consumerNum[i];
-    // }
-    // std::cout << "total has " << count << " elements.\n";
-    // std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
+    int count = 0;
+    for (auto &partition: partitions) {
+        count += partition.queue.size();
+    }
+    std::cout << "total has " << count << " elements.\n";
+    count = 0;
+    for (size_t i = 0; i < consumerNum.size(); ++i) {
+        // std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
+        count += consumerNum[i];
+    }
+    std::cout << "total has " << count << " elements.\n";
+    std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
     return 0;
 }
