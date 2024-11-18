@@ -262,10 +262,13 @@ int main() {
         // std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
     }
     std::cout << "Elapsed times for all iterations:" << std::endl;
+    int num = 1000000;
     for (size_t i = 0; i < elapsedTimes.size(); ++i) {
+        std::cout << "target number of logs " << num << std::endl;
         std::cout << "Execution Time: " << elapsedTimes[i] << " ms\n";
         std::cout << "Throughput: " << throughputs[i] << " operations/second\n";
         std::cout << "Latency: " << latencies[i] << " seconds/operation\n\n";
+        num += 1000000;
     }
     return 0;
 }

@@ -45,6 +45,7 @@ int main() {
     for (int num = 1000000; num <= 10000000; num += 1000000) {
         auto start = std::chrono::high_resolution_clock::now();
         std::vector<std::string> logs = loadLogs("combined_log.log", num);
+        std::cout << "number of data: " << num << std::endl;
         // Process each log sequentially
         for (const auto &log : logs) {
             processLog(log);
@@ -59,10 +60,13 @@ int main() {
         latencies.push_back(latency);
     }
     std::cout << "Elapsed times for all iterations:" << std::endl;
+    int num = 1000000;
     for (size_t i = 0; i < elapsedTimes.size(); ++i) {
+        std::cout << "number of data: " << num << std::endl;
         std::cout << "Execution Time: " << elapsedTimes[i] << " ms\n";
         std::cout << "Throughput: " << throughputs[i] << " operations/second\n";
         std::cout << "Latency: " << latencies[i] << " seconds/operation\n\n";
+        num += 1000000;
     }
     return 0;
 }
