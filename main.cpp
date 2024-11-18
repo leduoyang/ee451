@@ -92,9 +92,9 @@ public:
         }
 
         // size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
-        pthread_mutex_lock(&partitionCollectorMutex);
-        partitionNum[partitionIndex] += dataBatch.size();
-        pthread_mutex_unlock(&partitionCollectorMutex);
+        // pthread_mutex_lock(&partitionCollectorMutex);
+        // partitionNum[partitionIndex] += dataBatch.size();
+        // pthread_mutex_unlock(&partitionCollectorMutex);
         Partition &partition = partitions[partitionIndex];
         pthread_mutex_lock(&partition.queueMutex);
         for (const auto &log: dataBatch) {
