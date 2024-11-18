@@ -118,6 +118,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    int count = 0;
     // Consumer logic: retrieve and process logs from partitions
     for (int i = 0; i < NUM_PARTITIONS; ++i) {
         while (true) {
@@ -129,6 +130,7 @@ int main(int argc, char *argv[]) {
                 for (const char &ch: log) {
                     // Process each character 'ch' in 'log'
                 }
+                count += 1;
             }
             consumerNum[i] += batch.size();
         }
@@ -142,5 +144,6 @@ int main(int argc, char *argv[]) {
     std::cout << "Elapsed Time: " << elapsed.count() << " seconds\n";
     std::cout << "Throughput: " << throughput << " operations/second\n";
     std::cout << "Latency: " << latency << " seconds/operation\n";
+    std::cout << "total number of logs processed: " << count << " elements.\n";
     return 0;
 }
