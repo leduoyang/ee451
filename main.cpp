@@ -139,7 +139,7 @@ public:
 void *producer(void *arg) {
     MessageQueue *mq = static_cast<MessageQueue *>(arg);
     MessageQueueManager manager(mq->partitions);
-    std::vector<std::string> logs = loadLogs("combined_log.log", NUM_LOGS);
+    std::vector<std::string> logs = loadLogs("combined_log.log", NUM_LOGS / NUM_PRODUCERS);
     for (size_t i = 0; i < logs.size(); i += PRODUCER_BATCH_SIZE) {
         std::vector<std::string> batch;
         for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < logs.size(); ++j) {

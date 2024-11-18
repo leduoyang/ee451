@@ -44,7 +44,7 @@ int main() {
 
     for (int num = 1000000; num <= 10000000; num += 1000000) {
         auto start = std::chrono::high_resolution_clock::now();
-        std::vector<std::string> logs = loadLogs("apache.log", num);
+        std::vector<std::string> logs = loadLogs("combined_log.log", num);
         // Process each log sequentially
         for (const auto &log : logs) {
             processLog(log);
