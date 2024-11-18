@@ -1,72 +1,136 @@
 #include <iostream>
 #include <fstream>
+#include <queue>
 #include <vector>
 #include <string>
 #include <chrono>
-#include <thread>
+#include <limits>
 
+/* # of partitions */
+const int NUM_PARTITIONS = 1;
+const int PRODUCER_BATCH_SIZE = 100;
+const int CONSUMER_BATCH_SIZE = 100;
 
-// Function to load logs from a file into a vector
-std::vector<std::string> loadLogs(const std::string &filename, const int num) {
-    std::vector<std::string> logs;
+std::vector<int> partitionNum(NUM_PARTITIONS, 0);
+std::vector<int> consumerNum(NUM_PARTITIONS, 0);
+
+std::vector<std::string> globalLogs;
+
+struct Partition {
+    size_t consumerIndex = 0;
+    std::queue<std::string> queue;
+};
+
+void loadLogs(const std::string &filename) {
     std::ifstream file(filename);
     if (!file) {
         std::cerr << "Error opening file: " << filename << std::endl;
-        return logs;
+        return;
     }
     std::string line;
-    int count = 0;
     while (std::getline(file, line)) {
-        logs.push_back(line);
-        count += 1;
-        if(count == num) {
-          break;
-        }
+        globalLogs.push_back(line);
     }
     file.close();
-    return logs;
 }
 
-// Function to process logs (simulated by printing the log)
-void processLog(const std::string &log) {
-    // Simulate processing the log (e.g., parsing, analysis, etc.)
-//    std::cout << "Processed log: " << log << std::endl;
-//    std::this_thread::sleep_for(std::chrono::microseconds(10));
-    for (const char &ch : log) {
-        // Process each character 'ch' in 'log'
+std::vector<std::string> distributeLog(size_t producerIndex) {
+    size_t totalLogs = globalLogs.size();
+    size_t chunkSize = (totalLogs + NUM_PARTITIONS - 1) / NUM_PARTITIONS;
+    size_t startIndex = producerIndex * chunkSize;
+    size_t endIndex = std::min(startIndex + chunkSize, totalLogs);
+    if (startIndex >= totalLogs) {
+        return {};  // Return empty vector if startIndex is out of bounds
     }
+    return std::vector<std::string>(globalLogs.begin() + startIndex, globalLogs.begin() + endIndex);
 }
 
-int main() {
-    std::vector<double> elapsedTimes;
-    std::vector<double> throughputs;
-    std::vector<double> latencies;
+class MessageQueueManager {
+    std::vector<Partition> &partitions;
 
-    for (int num = 1000000; num <= 10000000; num += 1000000) {
-        auto start = std::chrono::high_resolution_clock::now();
-        std::vector<std::string> logs = loadLogs("combined_log.log", num);
-        std::cout << "number of data: " << num << std::endl;
-        // Process each log sequentially
-        for (const auto &log : logs) {
-            processLog(log);
+public:
+    MessageQueueManager(std::vector<Partition> &partitions) : partitions(partitions) {
+    }
+
+    void pushBatch(const std::vector<std::string> &dataBatch) {
+        if (dataBatch.empty()) return;  // Ensure we do not push empty batches
+
+        // Find the partition with the smallest queue size
+        size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
+        size_t minQueueSize = std::numeric_limits<size_t>::max();
+        for (size_t i = 0; i < partitions.size(); ++i) {
+            size_t currentQueueSize = partitions[i].queue.size();
+            if (currentQueueSize < minQueueSize) {
+                minQueueSize = currentQueueSize;
+                partitionIndex = i;
+            }
         }
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = end - start;
-        elapsedTimes.push_back(elapsed.count());
-        std::cout << "Total execution time: " << elapsed.count() << " seconds" << std::endl;
-        double throughput = num / elapsed.count();
-        double latency = elapsed.count() / num;
-        throughputs.push_back(throughput);
-        latencies.push_back(latency);
+
+        partitionNum[partitionIndex] += dataBatch.size();
+        Partition &partition = partitions[partitionIndex];
+        for (const auto &log : dataBatch) {
+            partition.queue.push(log);
+        }
     }
-    std::cout << "Elapsed times for all iterations:" << std::endl;
-    int num = 1000000;
-    for (size_t i = 0; i < elapsedTimes.size(); ++i) {
-        std::cout << "number of data: " << num << std::endl;
-        std::cout << "Execution Time: " << elapsedTimes[i] << " ms\n";
-        std::cout << "Throughput: " << throughputs[i] << " operations/second\n";
-        std::cout << "Latency: " << latencies[i] << " seconds/operation\n\n";
-        num += 1000000;
+
+    std::vector<std::string> retrieveBatchByIndex(int partitionIndex) {
+        std::vector<std::string> batch;
+        Partition &partition = partitions[partitionIndex];
+
+        size_t availableLogs = partition.queue.size() - partition.consumerIndex;
+        size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
+        partition.consumerIndex += logsToRetrieve;
+
+        for (int i = 0; i < logsToRetrieve; ++i) {
+            if (!partition.queue.empty()) {
+                batch.push_back(partition.queue.front());
+                partition.queue.pop();  // Safely pop the queue
+            }
+        }
+        return batch;
     }
+};
+
+int main(int argc, char *argv[]) {
+    // Initialize a message queue with a specific number of partitions
+    std::vector<Partition> partitions(NUM_PARTITIONS);
+    MessageQueueManager manager(partitions);
+    loadLogs("Android.log");
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Sequentially process logs (producer + consumer logic combined)
+
+    // Producer logic: distribute logs to partitions
+    for (int i = 0; i < NUM_PARTITIONS; ++i) {
+        std::vector<std::string> logs = distributeLog(i);
+        for (size_t j = 0; j < logs.size(); j += PRODUCER_BATCH_SIZE) {
+            std::vector<std::string> batch;
+            for (size_t k = j; k < j + PRODUCER_BATCH_SIZE && k < logs.size(); ++k) {
+                batch.push_back(logs[k]);
+            }
+            manager.pushBatch(batch);
+        }
+    }
+
+    // Consumer logic: retrieve and process logs from partitions
+    for (int i = 0; i < NUM_PARTITIONS; ++i) {
+        while (true) {
+            std::vector<std::string> batch = manager.retrieveBatchByIndex(i);
+            if (batch.empty()) {
+                break; // No more logs to process
+            }
+            for (const auto &log : batch) {
+                for (const char &ch : log) {
+                    // Process each character 'ch' in 'log'
+                }
+            }
+            consumerNum[i] += batch.size();
+        }
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+
+    std::cout << "Elapsed Time: " << elapsed.count() << " seconds\n";
     return 0;
 }

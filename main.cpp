@@ -11,19 +11,20 @@
  * # of consumers
  * # of partitions
  */
-const int NUM_PRODUCERS = 32;
-const int NUM_CONSUMERS = 6;
-const int NUM_PARTITIONS = 6;
+const int NUM_PRODUCERS = 4;
+const int NUM_CONSUMERS = 8;
+const int NUM_PARTITIONS = 8;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
-int NUM_LOGS = 30000000;
 
 const int PRODUCER_BATCH_SIZE = 100;
 const int CONSUMER_BATCH_SIZE = 100;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
 int busyWaitingNum = 0;
+
+std::vector<std::string> globalLogs;
 
 struct Partition {
     size_t consumerIndex = 0;
@@ -38,29 +39,35 @@ struct MessageQueue {
     std::vector<Partition> &partitions;
 };
 
+struct ProducerArg {
+    MessageQueue *mq;
+    int producerIndex;
+};
+
 struct ConsumerArg {
     MessageQueue *mq;
     int consumerIndex;
 };
 
-std::vector<std::string> loadLogs(const std::string &filename, const int num) {
-    std::vector<std::string> logs;
+void loadLogs(const std::string &filename) {
     std::ifstream file(filename);
     if (!file) {
         std::cerr << "Error opening file: " << filename << std::endl;
-        return logs;
+        return;
     }
-    int count = 0;
     std::string line;
     while (std::getline(file, line)) {
-        logs.push_back(line);
-        count += 1;
-        if (count >= num) {
-            break;
-        }
+        globalLogs.push_back(line);
     }
     file.close();
-    return logs;
+}
+
+std::vector<std::string> distributeLog(size_t producerIndex) {
+    size_t totalLogs = globalLogs.size();
+    size_t chunkSize = (totalLogs + NUM_PRODUCERS - 1) / NUM_PRODUCERS;
+    size_t startIndex = producerIndex * chunkSize;
+    size_t endIndex = std::min(startIndex + chunkSize, totalLogs);
+    return std::vector<std::string>(globalLogs.begin() + startIndex, globalLogs.begin() + endIndex);
 }
 
 class MessageQueueManager {
@@ -137,15 +144,18 @@ public:
 };
 
 void *producer(void *arg) {
-    MessageQueue *mq = static_cast<MessageQueue *>(arg);
+    ProducerArg *producerArg = static_cast<ProducerArg *>(arg);
+    MessageQueue *mq = producerArg->mq;
     MessageQueueManager manager(mq->partitions);
-    std::vector<std::string> logs = loadLogs("combined_log.log", NUM_LOGS / NUM_PRODUCERS);
+
+    size_t index = producerArg->producerIndex;
+    std::vector<std::string> logs = distributeLog(index);
     for (size_t i = 0; i < logs.size(); i += PRODUCER_BATCH_SIZE) {
         std::vector<std::string> batch;
         for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < logs.size(); ++j) {
             batch.push_back(logs[j]);
         }
-        manager.pushBatch(batch); // Push the entire batch at once
+        manager.pushBatch(batch);
     }
     pthread_mutex_lock(&producersFinishedMutex);
     NUM_PRODUCERS_FINISHED += 1;
@@ -198,77 +208,68 @@ void *consumer(void *arg) {
     return nullptr;
 }
 
-int main() {
-    std::vector<double> elapsedTimes;
-    std::vector<double> throughputs;
-    std::vector<double> latencies;
-    for (int num = 1000000; num <= 10000000; num += 1000000) {
-        NUM_LOGS = num;
-        std::cout << "target number of logs " << NUM_LOGS << std::endl;
+int main(int argc, char *argv[]) {
+    // if (argc != 2) {
+    //     std::cerr << "Usage: ./program_name <NUM_LOGS>" << std::endl;
+    //     return 1;
+    // }
+    // int NUM_LOGS = std::stoi(argv[1]);
 
-        // initialize a message queue with specific number of partitions based on the number of consumers
-        std::vector<Partition> partitions(NUM_PARTITIONS);
-        for (auto &partition: partitions) {
-            partition.queueMutex = PTHREAD_MUTEX_INITIALIZER;
-            partition.indexMutex = PTHREAD_MUTEX_INITIALIZER;
-            partition.cond_produce = PTHREAD_COND_INITIALIZER;
-            partition.cond_consume = PTHREAD_COND_INITIALIZER;
-        }
-        MessageQueue messageQueue{partitions};
-
-        auto start = std::chrono::high_resolution_clock::now();
-        std::vector<pthread_t> producerThreads(NUM_PRODUCERS);
-        for (int i = 0; i < NUM_PRODUCERS; i++) {
-            pthread_create(&producerThreads[i], nullptr, producer, &messageQueue);
-        }
-
-        std::vector<pthread_t> consumerThreads(NUM_CONSUMERS);
-        std::vector<ConsumerArg> consumerArgs(NUM_CONSUMERS);
-        for (int i = 0; i < NUM_CONSUMERS; i++) {
-            consumerArgs[i].mq = &messageQueue;
-            consumerArgs[i].consumerIndex = i;
-            pthread_create(&consumerThreads[i], nullptr, consumer, &consumerArgs[i]);
-        }
-
-        for (int i = 0; i < NUM_PRODUCERS; i++) {
-            pthread_join(producerThreads[i], nullptr);
-        }
-        for (int i = 0; i < NUM_CONSUMERS; i++) {
-            pthread_join(consumerThreads[i], nullptr);
-        }
-        auto end = std::chrono::high_resolution_clock::now();
-
-        std::chrono::duration<double> elapsed = end - start;
-        elapsedTimes.push_back(elapsed.count());
-        std::cout << "Total execution time: " << elapsed.count() << " seconds" << std::endl;
-        // compute throughput
-        double throughput = NUM_LOGS / elapsed.count();
-        double latency = elapsed.count() / NUM_LOGS;
-        throughputs.push_back(throughput);
-        latencies.push_back(latency);
-        // compute latency
-        // int count = 0;
-        // for (size_t i = 0; i < partitionNum.size(); ++i) {
-        //     std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
-        //     count += partitionNum[i];
-        // }
-        // std::cout << "total has " << count << " elements.\n";
-        // count = 0;
-        // for (size_t i = 0; i < consumerNum.size(); ++i) {
-        //     std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
-        //     count += consumerNum[i];
-        // }
-        // std::cout << "total has " << count << " elements.\n";
-        // std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
+    // initialize a message queue with specific number of partitions based on the number of consumers
+    std::vector<Partition> partitions(NUM_PARTITIONS);
+    for (auto &partition: partitions) {
+        partition.queueMutex = PTHREAD_MUTEX_INITIALIZER;
+        partition.indexMutex = PTHREAD_MUTEX_INITIALIZER;
+        partition.cond_produce = PTHREAD_COND_INITIALIZER;
+        partition.cond_consume = PTHREAD_COND_INITIALIZER;
     }
-    std::cout << "Elapsed times for all iterations:" << std::endl;
-    int num = 1000000;
-    for (size_t i = 0; i < elapsedTimes.size(); ++i) {
-        std::cout << "target number of logs " << num << std::endl;
-        std::cout << "Execution Time: " << elapsedTimes[i] << " ms\n";
-        std::cout << "Throughput: " << throughputs[i] << " operations/second\n";
-        std::cout << "Latency: " << latencies[i] << " seconds/operation\n\n";
-        num += 1000000;
+    MessageQueue messageQueue{partitions};
+    loadLogs("Android.log");
+    auto start = std::chrono::high_resolution_clock::now();
+
+    std::vector<pthread_t> producerThreads(NUM_PRODUCERS);
+    std::vector<ProducerArg> producerArgs(NUM_PRODUCERS);
+    for (int i = 0; i < NUM_PRODUCERS; i++) {
+        producerArgs[i].mq = &messageQueue;
+        producerArgs[i].producerIndex = i;
+        pthread_create(&producerThreads[i], nullptr, producer, &producerArgs[i]);
     }
+
+    std::vector<pthread_t> consumerThreads(NUM_CONSUMERS);
+    std::vector<ConsumerArg> consumerArgs(NUM_CONSUMERS);
+    for (int i = 0; i < NUM_CONSUMERS; i++) {
+        consumerArgs[i].mq = &messageQueue;
+        consumerArgs[i].consumerIndex = i;
+        pthread_create(&consumerThreads[i], nullptr, consumer, &consumerArgs[i]);
+    }
+
+    for (int i = 0; i < NUM_PRODUCERS; i++) {
+        pthread_join(producerThreads[i], nullptr);
+    }
+    for (int i = 0; i < NUM_CONSUMERS; i++) {
+        pthread_join(consumerThreads[i], nullptr);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> elapsed = end - start;
+    // double throughput = NUM_LOGS / elapsed.count();
+    // double latency = elapsed.count() / NUM_LOGS;
+    std::cout << "Elapsed Time: " << elapsed.count() << " seconds\n";
+    // std::cout << "Throughput: " << throughput << " operations/second\n";
+    // std::cout << "Latency: " << latency << " seconds/operation\n";
+    // compute latency
+    // int count = 0;
+    // for (size_t i = 0; i < partitionNum.size(); ++i) {
+    //     std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
+    //     count += partitionNum[i];
+    // }
+    // std::cout << "total has " << count << " elements.\n";
+    // count = 0;
+    // for (size_t i = 0; i < consumerNum.size(); ++i) {
+    //     std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
+    //     count += consumerNum[i];
+    // }
+    // std::cout << "total has " << count << " elements.\n";
+    // std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
     return 0;
 }
