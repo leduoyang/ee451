@@ -217,6 +217,7 @@ int main(int argc, char *argv[]) {
         partition.cond_consume = PTHREAD_COND_INITIALIZER;
     }
     MessageQueue messageQueue{partitions};
+    loadLogs("combined_log.log");
     if (argc == 2) {
         int NUM_LOGS = std::stoi(argv[1]);
         if (NUM_LOGS < globalLogs.size()) {
