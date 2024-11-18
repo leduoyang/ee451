@@ -11,9 +11,9 @@
  * # of consumers
  * # of partitions
  */
-int NUM_PRODUCERS = 4;
-int NUM_CONSUMERS = 8;
-int NUM_PARTITIONS = 8;
+int NUM_PRODUCERS = 16;
+int NUM_CONSUMERS = 16;
+int NUM_PARTITIONS = 16;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -149,11 +149,15 @@ void *producer(void *arg) {
     MessageQueueManager manager(mq->partitions);
 
     size_t index = producerArg->producerIndex;
-    std::vector<std::string> logs = distributeLog(index);
-    for (size_t i = 0; i < logs.size(); i += PRODUCER_BATCH_SIZE) {
+    size_t totalLogs = globalLogs.size();
+    size_t chunkSize = (totalLogs + NUM_PRODUCERS - 1) / NUM_PRODUCERS;
+    size_t startIndex = index * chunkSize;
+    size_t endIndex = std::min(startIndex + chunkSize, totalLogs);
+    // std::vector<std::string> logs = distributeLog(index);
+    for (size_t i = startIndex; i < endIndex; i += PRODUCER_BATCH_SIZE) {
         std::vector<std::string> batch;
-        for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < logs.size(); ++j) {
-            batch.push_back(logs[j]);
+        for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < globalLogs.size(); ++j) {
+            batch.push_back(globalLogs[j]);
         }
         manager.pushBatch(batch);
     }
@@ -220,9 +224,9 @@ int main(int argc, char *argv[]) {
     loadLogs("combined_log.log");
     if (argc == 2) {
         int NUM_LOGS = std::stoi(argv[1]);
-        NUM_PRODUCERS = NUM_LOGS / 1000000;
-        NUM_CONSUMERS = NUM_LOGS / 1000000;
-        NUM_PARTITIONS = NUM_LOGS / 1000000;
+        // NUM_PRODUCERS = NUM_LOGS / 1000000;
+        // NUM_CONSUMERS = NUM_LOGS / 1000000;
+        // NUM_PARTITIONS = NUM_LOGS / 1000000;
         if (NUM_LOGS < globalLogs.size()) {
             globalLogs.resize(NUM_LOGS);
         }
