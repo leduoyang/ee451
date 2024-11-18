@@ -112,10 +112,11 @@ public:
             pthread_mutex_lock(&producersFinishedMutex);
             if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
                 // std::cout << "escape" << std::endl;
-                pthread_mutex_unlock(&producersFinishedMutex);
                 if(partition.consumerIndex < partition.queue.size()) {
+                    pthread_mutex_unlock(&producersFinishedMutex);
                     break;
                 }
+                pthread_mutex_unlock(&producersFinishedMutex);
                 pthread_mutex_unlock(&partition.indexMutex);
                 return batch;
             }
@@ -167,7 +168,7 @@ void *producer(void *arg) {
     pthread_mutex_lock(&producersFinishedMutex);
     NUM_PRODUCERS_FINISHED += 1;
     pthread_mutex_unlock(&producersFinishedMutex);
-    manager.broadcast();
+    // manager.broadcast();
     return nullptr;
 }
 
