@@ -209,13 +209,6 @@ void *consumer(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
-    // if (argc != 2) {
-    //     std::cerr << "Usage: ./program_name <NUM_LOGS>" << std::endl;
-    //     return 1;
-    // }
-    // int NUM_LOGS = std::stoi(argv[1]);
-
-    // initialize a message queue with specific number of partitions based on the number of consumers
     std::vector<Partition> partitions(NUM_PARTITIONS);
     for (auto &partition: partitions) {
         partition.queueMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -252,24 +245,24 @@ int main(int argc, char *argv[]) {
     auto end = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double> elapsed = end - start;
-    // double throughput = NUM_LOGS / elapsed.count();
-    // double latency = elapsed.count() / NUM_LOGS;
+    size_t log_size = globalLogs.size();
+    double throughput = log_size / elapsed.count();
+    double latency = elapsed.count() / log_size;
     std::cout << "Elapsed Time: " << elapsed.count() << " seconds\n";
-    // std::cout << "Throughput: " << throughput << " operations/second\n";
-    // std::cout << "Latency: " << latency << " seconds/operation\n";
-    // compute latency
-    // int count = 0;
-    // for (size_t i = 0; i < partitionNum.size(); ++i) {
-    //     std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
-    //     count += partitionNum[i];
-    // }
-    // std::cout << "total has " << count << " elements.\n";
-    // count = 0;
-    // for (size_t i = 0; i < consumerNum.size(); ++i) {
-    //     std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
-    //     count += consumerNum[i];
-    // }
-    // std::cout << "total has " << count << " elements.\n";
-    // std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
+    std::cout << "Throughput: " << throughput << " operations/second\n";
+    std::cout << "Latency: " << latency << " seconds/operation\n";
+    int count = 0;
+    for (size_t i = 0; i < partitionNum.size(); ++i) {
+        std::cout << "Partition " << i << " has " << partitionNum[i] << " elements.\n";
+        count += partitionNum[i];
+    }
+    std::cout << "total has " << count << " elements.\n";
+    count = 0;
+    for (size_t i = 0; i < consumerNum.size(); ++i) {
+        std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
+        count += consumerNum[i];
+    }
+    std::cout << "total has " << count << " elements.\n";
+    std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
     return 0;
 }

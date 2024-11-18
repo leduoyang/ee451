@@ -40,7 +40,7 @@ std::vector<std::string> distributeLog(size_t producerIndex) {
     size_t startIndex = producerIndex * chunkSize;
     size_t endIndex = std::min(startIndex + chunkSize, totalLogs);
     if (startIndex >= totalLogs) {
-        return {};  // Return empty vector if startIndex is out of bounds
+        return {}; // Return empty vector if startIndex is out of bounds
     }
     return std::vector<std::string>(globalLogs.begin() + startIndex, globalLogs.begin() + endIndex);
 }
@@ -53,7 +53,7 @@ public:
     }
 
     void pushBatch(const std::vector<std::string> &dataBatch) {
-        if (dataBatch.empty()) return;  // Ensure we do not push empty batches
+        if (dataBatch.empty()) return; // Ensure we do not push empty batches
 
         // Find the partition with the smallest queue size
         size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
@@ -68,7 +68,7 @@ public:
 
         partitionNum[partitionIndex] += dataBatch.size();
         Partition &partition = partitions[partitionIndex];
-        for (const auto &log : dataBatch) {
+        for (const auto &log: dataBatch) {
             partition.queue.push(log);
         }
     }
@@ -84,7 +84,7 @@ public:
         for (int i = 0; i < logsToRetrieve; ++i) {
             if (!partition.queue.empty()) {
                 batch.push_back(partition.queue.front());
-                partition.queue.pop();  // Safely pop the queue
+                partition.queue.pop(); // Safely pop the queue
             }
         }
         return batch;
@@ -119,8 +119,8 @@ int main(int argc, char *argv[]) {
             if (batch.empty()) {
                 break; // No more logs to process
             }
-            for (const auto &log : batch) {
-                for (const char &ch : log) {
+            for (const auto &log: batch) {
+                for (const char &ch: log) {
                     // Process each character 'ch' in 'log'
                 }
             }
@@ -130,7 +130,11 @@ int main(int argc, char *argv[]) {
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-
+    size_t log_size = globalLogs.size();
+    double throughput = log_size / elapsed.count();
+    double latency = elapsed.count() / log_size;
     std::cout << "Elapsed Time: " << elapsed.count() << " seconds\n";
+    std::cout << "Throughput: " << throughput << " operations/second\n";
+    std::cout << "Latency: " << latency << " seconds/operation\n";
     return 0;
 }
