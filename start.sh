@@ -17,8 +17,8 @@ for param in "${parameters[@]}"; do
     echo "Running ./main with parameter: $param"
     ./main $param 8 8
     echo "========================================"
+    sleep 10
 done
-sleep 10
 
 # third exp
 echo "================= consumer experiment ======================="
@@ -27,8 +27,8 @@ for param in "${parameters[@]}"; do
     echo "Running ./main with parameter: $param"
     ./main 8 $param $param
     echo "========================================"
+    sleep 10
 done
-sleep 10
 
 # forth exp
 echo "================= partition experiment ======================="
@@ -37,8 +37,8 @@ for param in "${parameters[@]}"; do
     echo "Running ./main with parameter: $param"
     ./main 8 8 $param
     echo "========================================"
+    sleep 10
 done
-sleep 10
 
 # fifth exp
 echo "================= batch experiment ======================="
@@ -47,4 +47,5 @@ for param in "${parameters[@]}"; do
     echo "Running ./main with parameter: $param"
     ./main 8 8 8 $param
     echo "========================================"
+    sleep 10
 done

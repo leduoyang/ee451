@@ -11,9 +11,9 @@
  * # of consumers
  * # of partitions
  */
-int NUM_PRODUCERS = 8;
-int NUM_CONSUMERS = 8;
-int NUM_PARTITIONS = 8;
+int NUM_PRODUCERS = 64;
+int NUM_CONSUMERS = 64;
+int NUM_PARTITIONS = 64;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -64,7 +64,7 @@ void loadLogs(const std::string &filename) {
 
 std::vector<std::string> distributeLog(size_t producerIndex) {
     size_t totalLogs = globalLogs.size();
-    size_t chunkSize = (totalLogs + NUM_PRODUCERS - 1) / NUM_PRODUCERS;
+    size_t chunkSize = totalLogs / NUM_PRODUCERS;
     size_t startIndex = producerIndex * chunkSize;
     size_t endIndex = std::min(startIndex + chunkSize, totalLogs);
     return std::vector<std::string>(globalLogs.begin() + startIndex, globalLogs.begin() + endIndex);
@@ -154,13 +154,16 @@ void *producer(void *arg) {
 
     size_t index = producerArg->producerIndex;
     size_t totalLogs = globalLogs.size();
-    size_t chunkSize = (totalLogs + NUM_PRODUCERS - 1) / NUM_PRODUCERS;
+    size_t chunkSize = totalLogs / NUM_PRODUCERS;
     size_t startIndex = index * chunkSize;
     size_t endIndex = std::min(startIndex + chunkSize, totalLogs);
+    if (index == NUM_PRODUCERS - 1) {
+        endIndex = totalLogs;
+    }
     // std::vector<std::string> logs = distributeLog(index);
     for (size_t i = startIndex; i < endIndex; i += PRODUCER_BATCH_SIZE) {
         std::vector<std::string> batch;
-        for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < globalLogs.size(); ++j) {
+        for (size_t j = i; j < i + PRODUCER_BATCH_SIZE && j < endIndex; ++j) {
             batch.push_back(globalLogs[j]);
         }
         manager.pushBatch(batch);
