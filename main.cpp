@@ -100,7 +100,8 @@ public:
         for (const auto &log: dataBatch) {
             partition.queue.push(log);
         }
-        pthread_cond_signal(&partition.cond_consume);
+        //pthread_cond_signal(&partition.cond_consume);
+        pthread_cond_broadcast(&partition.cond_consume);
         pthread_mutex_unlock(&partition.queueMutex);
     }
 
@@ -200,23 +201,23 @@ void *consumer(void *arg) {
         size_t maxAvailableLogs = latestPartitionSize > latestPartitionIndex
                                       ? latestPartitionSize - latestPartitionIndex
                                       : 0;
-        // Re-balance: Find a better partition
-        if (latestPartitionSize - latestPartitionIndex < CONSUMER_BATCH_SIZE) {
-            size_t nextPartitionIndex = partitionIndex;
-            for (size_t i = 0; i < mq->partitions.size(); i++) {
-                size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
-                size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
-                size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
-                size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
-                                                    ? candidateQueueSize - candidateQueueIndex
-                                                    : 0;
-                if (candidateAvailableLogs > maxAvailableLogs) {
-                    nextPartitionIndex = candidateIndex;
-                    maxAvailableLogs = candidateAvailableLogs;
-                }
-            }
-            partitionIndex = nextPartitionIndex;
-        }
+        // // Re-balance: Find a better partition
+        // if (latestPartitionSize - latestPartitionIndex < CONSUMER_BATCH_SIZE) {
+        //     size_t nextPartitionIndex = partitionIndex;
+        //     for (size_t i = 0; i < mq->partitions.size(); i++) {
+        //         size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
+        //         size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
+        //         size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
+        //         size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
+        //                                             ? candidateQueueSize - candidateQueueIndex
+        //                                             : 0;
+        //         if (candidateAvailableLogs > maxAvailableLogs) {
+        //             nextPartitionIndex = candidateIndex;
+        //             maxAvailableLogs = candidateAvailableLogs;
+        //         }
+        //     }
+        //     partitionIndex = nextPartitionIndex;
+        // }
     }
     return nullptr;
 }
@@ -285,6 +286,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Latency: " << latency << " seconds/operation\n";
     int count = 0;
     for (auto &partition: partitions) {
+        std::cout << "Partition has: " << partition.queue.size() << " elements.\n";
         count += partition.queue.size();
     }
     std::cout << "total has " << count << " elements.\n";
