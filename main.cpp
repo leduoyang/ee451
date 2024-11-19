@@ -80,16 +80,16 @@ public:
     void pushBatch(const std::vector<std::string> &dataBatch) {
         // Find the partition with the smallest queue size
         size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
-        // size_t minQueueSize = std::numeric_limits<size_t>::max();
-        // for (size_t i = 0; i < partitions.size(); ++i) {
-        //     // pthread_mutex_lock(&partitions[i].queueMutex);
-        //     size_t currentQueueSize = partitions[i].queue.size();
-        //     // pthread_mutex_unlock(&partitions[i].queueMutex);
-        //     if (currentQueueSize < minQueueSize) {
-        //         minQueueSize = currentQueueSize;
-        //         partitionIndex = i;
-        //     }
-        // }
+        size_t minQueueSize = std::numeric_limits<size_t>::max();
+        for (size_t i = 0; i < partitions.size(); ++i) {
+            // pthread_mutex_lock(&partitions[i].queueMutex);
+            size_t currentQueueSize = partitions[i].queue.size();
+            // pthread_mutex_unlock(&partitions[i].queueMutex);
+            if (currentQueueSize < minQueueSize) {
+                minQueueSize = currentQueueSize;
+                partitionIndex = i;
+            }
+        }
 
         // size_t partitionIndex = std::hash<std::string>{}(dataBatch[0]) % partitions.size();
         // pthread_mutex_lock(&partitionCollectorMutex);
@@ -100,7 +100,7 @@ public:
         for (const auto &log: dataBatch) {
             partition.queue.push(log);
         }
-        // pthread_cond_signal(&partition.cond_consume);
+        pthread_cond_signal(&partition.cond_consume);
         pthread_mutex_unlock(&partition.queueMutex);
     }
 
