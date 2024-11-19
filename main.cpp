@@ -11,15 +11,15 @@
  * # of consumers
  * # of partitions
  */
-int NUM_PRODUCERS = 256;
-int NUM_CONSUMERS = 256;
-int NUM_PARTITIONS = 64;
+int NUM_PRODUCERS = 8;
+int NUM_CONSUMERS = 8;
+int NUM_PARTITIONS = 8;
 int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
 const int PRODUCER_BATCH_SIZE = 10000;
-const int CONSUMER_BATCH_SIZE = 10000;
+const int CONSUMER_BATCH_SIZE = 1000;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
 int busyWaitingNum = 0;
@@ -112,7 +112,7 @@ public:
             pthread_mutex_lock(&producersFinishedMutex);
             if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
                 // std::cout << "escape" << std::endl;
-                if(partition.consumerIndex < partition.queue.size()) {
+                if (partition.consumerIndex < partition.queue.size()) {
                     pthread_mutex_unlock(&producersFinishedMutex);
                     break;
                 }
@@ -195,28 +195,32 @@ void *consumer(void *arg) {
         size_t maxAvailableLogs = latestPartitionSize > latestPartitionIndex
                                       ? latestPartitionSize - latestPartitionIndex
                                       : 0;
-        // Re-balance: Find a better partition
-        // if (latestPartitionSize - latestPartitionIndex < batch.size()) {
-        //     size_t nextPartitionIndex = partitionIndex;
-        //     for (size_t i = 0; i < mq->partitions.size(); i++) {
-        //         size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
-        //         size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
-        //         size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
-        //         size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
-        //                                             ? candidateQueueSize - candidateQueueIndex
-        //                                             : 0;
-        //         if (candidateAvailableLogs > maxAvailableLogs) {
-        //             nextPartitionIndex = candidateIndex;
-        //             maxAvailableLogs = candidateAvailableLogs;
-        //         }
-        //     }
-        //     partitionIndex = nextPartitionIndex;
-        // }
+        // // Re-balance: Find a better partition
+        //        // if (latestPartitionSize - latestPartitionIndex < batch.size()) {
+        //        //     size_t nextPartitionIndex = partitionIndex;
+        //        //     for (size_t i = 0; i < mq->partitions.size(); i++) {
+        //        //         size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
+        //        //         size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
+        //        //         size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
+        //        //         size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
+        //        //                                             ? candidateQueueSize - candidateQueueIndex
+        //        //                                             : 0;
+        //        //         if (candidateAvailableLogs > maxAvailableLogs) {
+        //        //             nextPartitionIndex = candidateIndex;
+        //        //             maxAvailableLogs = candidateAvailableLogs;
+        //        //         }
+        //        //     }
+        //        //     partitionIndex = nextPartitionIndex;
+        //        // }
     }
     return nullptr;
 }
 
 int main(int argc, char *argv[]) {
+    NUM_PARTITIONS = std::atoi(argv[1]);
+    // NUM_CONSUMERS = NUM_PRODUCERS;
+    // NUM_PARTITIONS = NUM_CONSUMERS;
+
     std::vector<Partition> partitions(NUM_PARTITIONS);
     for (auto &partition: partitions) {
         partition.queueMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -224,19 +228,13 @@ int main(int argc, char *argv[]) {
         partition.cond_produce = PTHREAD_COND_INITIALIZER;
         partition.cond_consume = PTHREAD_COND_INITIALIZER;
     }
-    MessageQueue messageQueue{partitions};
-    loadLogs("combined_log.log");
-    if (argc == 2) {
-        int NUM_LOGS = std::stoi(argv[1]);
-        // NUM_PRODUCERS = NUM_LOGS / 1000000;
-        // NUM_CONSUMERS = NUM_LOGS / 1000000;
-        // NUM_PARTITIONS = NUM_LOGS / 1000000;
-        if (NUM_LOGS < globalLogs.size()) {
-            globalLogs.resize(NUM_LOGS);
-        }
-    }
-    auto start = std::chrono::high_resolution_clock::now();
 
+    MessageQueue messageQueue{partitions};
+    auto loadingStart = std::chrono::high_resolution_clock::now();
+    loadLogs("combined_log.log");
+    auto loadingEnd = std::chrono::high_resolution_clock::now();
+
+    auto start = std::chrono::high_resolution_clock::now();
     std::vector<pthread_t> producerThreads(NUM_PRODUCERS);
     std::vector<ProducerArg> producerArgs(NUM_PRODUCERS);
     for (int i = 0; i < NUM_PRODUCERS; i++) {
@@ -261,15 +259,19 @@ int main(int argc, char *argv[]) {
     }
     auto end = std::chrono::high_resolution_clock::now();
 
+    std::chrono::duration<double> loadingElapsed = loadingEnd - loadingStart;
     std::chrono::duration<double> elapsed = end - start;
     size_t log_size = globalLogs.size();
     double throughput = log_size / elapsed.count();
     double latency = elapsed.count() / log_size;
-    std::cout << "Elapsed Time: " << elapsed.count() << " seconds\n";
+    std::cout << "Serial Elapsed Time (loading data): " << loadingElapsed.count() << " seconds\n";
+    std::cout << "Parallel Elapsed Time: " << elapsed.count() << " seconds\n";
+    std::cout << "Overall Elapsed Time: " << loadingElapsed.count() + elapsed.count() << " seconds\n";
     std::cout << "Throughput: " << throughput << " operations/second\n";
     std::cout << "Latency: " << latency << " seconds/operation\n";
     std::cout << "number of producers: " << NUM_PRODUCERS << "\n";
     std::cout << "number of consumers: " << NUM_CONSUMERS << "\n";
+    std::cout << "number of partitions: " << NUM_PARTITIONS << "\n";
     int count = 0;
     for (auto &partition: partitions) {
         count += partition.queue.size();
