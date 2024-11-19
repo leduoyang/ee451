@@ -18,11 +18,11 @@ int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
-int PRODUCER_BATCH_SIZE = 10000;
+int PRODUCER_BATCH_SIZE = 1000;
 int CONSUMER_BATCH_SIZE = 1000;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
-int busyWaitingNum = 0;
+std::chrono::duration<double> waitDuration;
 
 std::vector<std::string> globalLogs;
 
@@ -122,8 +122,10 @@ public:
             }
             pthread_mutex_unlock(&producersFinishedMutex);
             // std::cout << "busy waiting" << std::endl;
-            busyWaitingNum += 1;
-            //pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
+            auto waitStart = std::chrono::high_resolution_clock::now();
+            pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
+            auto waitEnd = std::chrono::high_resolution_clock::now();
+            waitDuration += (waitStart - waitEnd);
         }
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
         size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
@@ -171,7 +173,7 @@ void *producer(void *arg) {
     pthread_mutex_lock(&producersFinishedMutex);
     NUM_PRODUCERS_FINISHED += 1;
     pthread_mutex_unlock(&producersFinishedMutex);
-    // manager.broadcast();
+    manager.broadcast();
     return nullptr;
 }
 
@@ -199,33 +201,33 @@ void *consumer(void *arg) {
                                       ? latestPartitionSize - latestPartitionIndex
                                       : 0;
         // // Re-balance: Find a better partition
-        if (latestPartitionSize - latestPartitionIndex < batch.size()) {
-            size_t nextPartitionIndex = partitionIndex;
-            for (size_t i = 0; i < mq->partitions.size(); i++) {
-                size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
-                size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
-                size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
-                size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
-                                                    ? candidateQueueSize - candidateQueueIndex
-                                                    : 0;
-                if (candidateAvailableLogs > maxAvailableLogs) {
-                    nextPartitionIndex = candidateIndex;
-                    maxAvailableLogs = candidateAvailableLogs;
-                }
-            }
-            partitionIndex = nextPartitionIndex;
-        }
+        // if (latestPartitionSize - latestPartitionIndex < CONSUMER_BATCH_SIZE) {
+        //     size_t nextPartitionIndex = partitionIndex;
+        //     for (size_t i = 0; i < mq->partitions.size(); i++) {
+        //         size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
+        //         size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
+        //         size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
+        //         size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
+        //                                             ? candidateQueueSize - candidateQueueIndex
+        //                                             : 0;
+        //         if (candidateAvailableLogs > maxAvailableLogs) {
+        //             nextPartitionIndex = candidateIndex;
+        //             maxAvailableLogs = candidateAvailableLogs;
+        //         }
+        //     }
+        //     partitionIndex = nextPartitionIndex;
+        // }
     }
     return nullptr;
 }
 
 int main(int argc, char *argv[]) {
-    NUM_PRODUCERS = std::atoi(argv[1]);
-    NUM_CONSUMERS = std::atoi(argv[2]);
-    NUM_PARTITIONS = std::atoi(argv[3]);
+    NUM_PRODUCERS = std::stoi(argv[1]);
+    NUM_CONSUMERS = std::stoi(argv[2]);
+    NUM_PARTITIONS = std::stoi(argv[3]);
     if (argc > 4) {
-        PRODUCER_BATCH_SIZE = std::atoi(argv[4]);
-        CONSUMER_BATCH_SIZE = std::atoi(argv[4]);
+        PRODUCER_BATCH_SIZE = std::stoi(argv[4]);
+        CONSUMER_BATCH_SIZE = std::stoi(argv[4]);
     }
     std::cout << "number of producers: " << NUM_PRODUCERS << "\n";
     std::cout << "number of consumers: " << NUM_CONSUMERS << "\n";
@@ -292,6 +294,6 @@ int main(int argc, char *argv[]) {
         count += consumerNum[i];
     }
     std::cout << "total has " << count << " elements.\n";
-    std::cout << "there are " << busyWaitingNum << " busy waiting.\n";
+    std::cout << "total time spent on waiting " << waitDuration.count() << " seconds\n";
     return 0;
 }
