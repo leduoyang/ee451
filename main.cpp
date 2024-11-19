@@ -19,7 +19,7 @@ pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int PRODUCER_BATCH_SIZE = 1000;
-int CONSUMER_BATCH_SIZE = 1000;
+int CONSUMER_BATCH_SIZE = 100;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
 std::chrono::duration<double> waitDuration;
@@ -123,10 +123,10 @@ public:
             }
             pthread_mutex_unlock(&producersFinishedMutex);
             // std::cout << "busy waiting" << std::endl;
-            // auto waitStart = std::chrono::high_resolution_clock::now();
-            // pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
-            // auto waitEnd = std::chrono::high_resolution_clock::now();
-            // waitDuration += (waitEnd - waitStart);
+            auto waitStart = std::chrono::high_resolution_clock::now();
+            pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
+            auto waitEnd = std::chrono::high_resolution_clock::now();
+            waitDuration += (waitEnd - waitStart);
         }
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
         size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
