@@ -199,22 +199,22 @@ void *consumer(void *arg) {
                                       ? latestPartitionSize - latestPartitionIndex
                                       : 0;
         // // Re-balance: Find a better partition
-        //        // if (latestPartitionSize - latestPartitionIndex < batch.size()) {
-        //        //     size_t nextPartitionIndex = partitionIndex;
-        //        //     for (size_t i = 0; i < mq->partitions.size(); i++) {
-        //        //         size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
-        //        //         size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
-        //        //         size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
-        //        //         size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
-        //        //                                             ? candidateQueueSize - candidateQueueIndex
-        //        //                                             : 0;
-        //        //         if (candidateAvailableLogs > maxAvailableLogs) {
-        //        //             nextPartitionIndex = candidateIndex;
-        //        //             maxAvailableLogs = candidateAvailableLogs;
-        //        //         }
-        //        //     }
-        //        //     partitionIndex = nextPartitionIndex;
-        //        // }
+        if (latestPartitionSize - latestPartitionIndex < batch.size()) {
+            size_t nextPartitionIndex = partitionIndex;
+            for (size_t i = 0; i < mq->partitions.size(); i++) {
+                size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
+                size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
+                size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
+                size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
+                                                    ? candidateQueueSize - candidateQueueIndex
+                                                    : 0;
+                if (candidateAvailableLogs > maxAvailableLogs) {
+                    nextPartitionIndex = candidateIndex;
+                    maxAvailableLogs = candidateAvailableLogs;
+                }
+            }
+            partitionIndex = nextPartitionIndex;
+        }
     }
     return nullptr;
 }
