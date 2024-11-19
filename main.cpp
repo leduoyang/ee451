@@ -125,7 +125,7 @@ public:
             auto waitStart = std::chrono::high_resolution_clock::now();
             pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
             auto waitEnd = std::chrono::high_resolution_clock::now();
-            waitDuration += (waitStart - waitEnd);
+            waitDuration += (waitEnd - waitStart);
         }
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
         size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
