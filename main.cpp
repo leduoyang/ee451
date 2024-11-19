@@ -123,10 +123,10 @@ public:
             }
             pthread_mutex_unlock(&producersFinishedMutex);
             // std::cout << "busy waiting" << std::endl;
-            auto waitStart = std::chrono::high_resolution_clock::now();
-            pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
-            auto waitEnd = std::chrono::high_resolution_clock::now();
-            waitDuration += (waitEnd - waitStart);
+            // auto waitStart = std::chrono::high_resolution_clock::now();
+            // pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
+            // auto waitEnd = std::chrono::high_resolution_clock::now();
+            // waitDuration += (waitEnd - waitStart);
         }
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
         size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
