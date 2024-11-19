@@ -1,20 +1,50 @@
 #!/bin/bash
 
-# Define the range of values for NUM_LOGS
-start=2000000
-end=10000000
-increment=2000000
-
-# baseline
-    echo "Running with NUM_LOGS=1000000"
-    ./main 10000000
-    echo "------------------------------------"
-
-# Iterate over the range and run the program
-for ((num=start; num<=end; num+=increment))
-do
-    echo "Running with NUM_LOGS=$num"
-    ./main $num
-    echo "------------------------------------"
+# first exp
+echo "================= serial vs parallel experiment ======================="
+parameters=(1 2 4 8 16 32 64)
+for param in "${parameters[@]}"; do
+    echo "Running ./main with parameter: $param"
+    ./main $param $param $param
+    echo "========================================"
 done
+sleep 10
 
+# second exp
+echo "================= producer experiment ======================="
+parameters=(1 2 4 8 16 32 64)
+for param in "${parameters[@]}"; do
+    echo "Running ./main with parameter: $param"
+    ./main $param 8 8
+    echo "========================================"
+done
+sleep 10
+
+# third exp
+echo "================= consumer experiment ======================="
+parameters=(1 2 4 8 16 32 64)
+for param in "${parameters[@]}"; do
+    echo "Running ./main with parameter: $param"
+    ./main 8 $param $param
+    echo "========================================"
+done
+sleep 10
+
+# forth exp
+echo "================= partition experiment ======================="
+parameters=(1 2 4 8 16 32 64)
+for param in "${parameters[@]}"; do
+    echo "Running ./main with parameter: $param"
+    ./main 8 8 $param
+    echo "========================================"
+done
+sleep 10
+
+# fifth exp
+echo "================= batch experiment ======================="
+parameters=(1 10 100 1000 10000 100000 1000000)
+for param in "${parameters[@]}"; do
+    echo "Running ./main with parameter: $param"
+    ./main 8 8 8 $param
+    echo "========================================"
+done

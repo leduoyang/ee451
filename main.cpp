@@ -18,8 +18,8 @@ int NUM_PRODUCERS_FINISHED = 0;
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
-const int PRODUCER_BATCH_SIZE = 10000;
-const int CONSUMER_BATCH_SIZE = 1000;
+int PRODUCER_BATCH_SIZE = 10000;
+int CONSUMER_BATCH_SIZE = 1000;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
 int busyWaitingNum = 0;
@@ -217,9 +217,18 @@ void *consumer(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
-    NUM_PARTITIONS = std::atoi(argv[1]);
-    // NUM_CONSUMERS = NUM_PRODUCERS;
-    // NUM_PARTITIONS = NUM_CONSUMERS;
+    NUM_PRODUCERS = std::atoi(argv[1]);
+    NUM_CONSUMERS = std::atoi(argv[2]);
+    NUM_PARTITIONS = std::atoi(argv[3]);
+    if (argc > 4) {
+        PRODUCER_BATCH_SIZE = std::atoi(argv[4]);
+        CONSUMER_BATCH_SIZE = std::atoi(argv[4]);
+    }
+    std::cout << "number of producers: " << NUM_PRODUCERS << "\n";
+    std::cout << "number of consumers: " << NUM_CONSUMERS << "\n";
+    std::cout << "number of partitions: " << NUM_PARTITIONS << "\n";
+    std::cout << "producer batch size: " << PRODUCER_BATCH_SIZE << "\n";
+    std::cout << "consumer batch size: " << CONSUMER_BATCH_SIZE << "\n";
 
     std::vector<Partition> partitions(NUM_PARTITIONS);
     for (auto &partition: partitions) {
@@ -269,9 +278,6 @@ int main(int argc, char *argv[]) {
     std::cout << "Overall Elapsed Time: " << loadingElapsed.count() + elapsed.count() << " seconds\n";
     std::cout << "Throughput: " << throughput << " operations/second\n";
     std::cout << "Latency: " << latency << " seconds/operation\n";
-    std::cout << "number of producers: " << NUM_PRODUCERS << "\n";
-    std::cout << "number of consumers: " << NUM_CONSUMERS << "\n";
-    std::cout << "number of partitions: " << NUM_PARTITIONS << "\n";
     int count = 0;
     for (auto &partition: partitions) {
         count += partition.queue.size();
