@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <chrono>
 #include <thread>
+#include <atomic>
 
 /* # of producers
  * # of consumers
@@ -14,7 +15,7 @@
 int NUM_PRODUCERS = 64;
 int NUM_CONSUMERS = 64;
 int NUM_PARTITIONS = 64;
-int NUM_PRODUCERS_FINISHED = 0;
+std::atomic<int> NUM_PRODUCERS_FINISHED(0);
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -28,7 +29,7 @@ std::vector<std::string> globalLogs;
 
 struct Partition {
     size_t consumerIndex = 0;
-    std::queue<std::string> queue;
+    std::vector<std::string> queue;
     pthread_mutex_t queueMutex;
     pthread_mutex_t indexMutex;
     pthread_cond_t cond_produce;
@@ -98,11 +99,11 @@ public:
         Partition &partition = partitions[partitionIndex];
         pthread_mutex_lock(&partition.queueMutex);
         for (const auto &log: dataBatch) {
-            partition.queue.push(log);
+            partition.queue.push_back(log);
         }
+        pthread_mutex_unlock(&partition.queueMutex);
         //pthread_cond_signal(&partition.cond_consume);
         pthread_cond_broadcast(&partition.cond_consume);
-        pthread_mutex_unlock(&partition.queueMutex);
     }
 
     std::vector<std::string> retrieveBatchByIndex(int partitionIndex) {
@@ -112,7 +113,6 @@ public:
         while (partition.queue.size() - partition.consumerIndex < CONSUMER_BATCH_SIZE) {
             pthread_mutex_lock(&producersFinishedMutex);
             if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
-                // std::cout << "escape" << std::endl;
                 if (partition.consumerIndex < partition.queue.size()) {
                     pthread_mutex_unlock(&producersFinishedMutex);
                     break;
@@ -139,7 +139,6 @@ public:
     }
 
     void broadcast() {
-        // std::cout << "broadcast in" << std::endl;
         pthread_mutex_lock(&producersFinishedMutex);
         if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
             for (auto &partition: partitions) {
@@ -171,9 +170,7 @@ void *producer(void *arg) {
         }
         manager.pushBatch(batch);
     }
-    pthread_mutex_lock(&producersFinishedMutex);
-    NUM_PRODUCERS_FINISHED += 1;
-    pthread_mutex_unlock(&producersFinishedMutex);
+    NUM_PRODUCERS_FINISHED.fetch_add(1, std::memory_order_relaxed);
     manager.broadcast();
     return nullptr;
 }
@@ -242,6 +239,7 @@ int main(int argc, char *argv[]) {
         partition.indexMutex = PTHREAD_MUTEX_INITIALIZER;
         partition.cond_produce = PTHREAD_COND_INITIALIZER;
         partition.cond_consume = PTHREAD_COND_INITIALIZER;
+        partition.queue.reserve(10000000);
     }
 
     MessageQueue messageQueue{partitions};
