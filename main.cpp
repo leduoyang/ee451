@@ -111,17 +111,13 @@ public:
         Partition &partition = partitions[partitionIndex];
         pthread_mutex_lock(&partition.indexMutex);
         while (partition.queue.size() - partition.consumerIndex < CONSUMER_BATCH_SIZE) {
-            pthread_mutex_lock(&producersFinishedMutex);
-            if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
+            if (NUM_PRODUCERS_FINISHED.load(std::memory_order_acquire) == NUM_PRODUCERS) {
                 if (partition.consumerIndex < partition.queue.size()) {
-                    pthread_mutex_unlock(&producersFinishedMutex);
                     break;
                 }
-                pthread_mutex_unlock(&producersFinishedMutex);
                 pthread_mutex_unlock(&partition.indexMutex);
                 return batch;
             }
-            pthread_mutex_unlock(&producersFinishedMutex);
             // std::cout << "busy waiting" << std::endl;
             auto waitStart = std::chrono::high_resolution_clock::now();
             pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
@@ -139,13 +135,11 @@ public:
     }
 
     void broadcast() {
-        pthread_mutex_lock(&producersFinishedMutex);
-        if (NUM_PRODUCERS_FINISHED == NUM_PRODUCERS) {
+        if (NUM_PRODUCERS_FINISHED.load(std::memory_order_acquire) == NUM_PRODUCERS) {
             for (auto &partition: partitions) {
                 pthread_cond_broadcast(&partition.cond_consume);
             }
         }
-        pthread_mutex_unlock(&producersFinishedMutex);
     }
 };
 
