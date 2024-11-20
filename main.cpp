@@ -14,7 +14,7 @@
  */
 int NUM_PRODUCERS = 64;
 int NUM_CONSUMERS = 64;
-int NUM_PARTITIONS = 64;
+int NUM_PARTITIONS = 16;
 std::atomic<int> NUM_PRODUCERS_FINISHED(0);
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -124,12 +124,13 @@ public:
             auto waitEnd = std::chrono::high_resolution_clock::now();
             waitDuration += (waitEnd - waitStart);
         }
+        size_t from = partition.consumerIndex;
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
         size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
         partition.consumerIndex += logsToRetrieve;
         pthread_mutex_unlock(&partition.indexMutex);
-        for (int i = 0; i < logsToRetrieve; ++i) {
-            batch.push_back(partition.queue.front());
+        for (size_t i = from; i < from + logsToRetrieve; ++i) {
+            batch.push_back(partition.queue.at(i));
         }
         return batch;
     }
@@ -192,24 +193,25 @@ void *consumer(void *arg) {
         size_t maxAvailableLogs = latestPartitionSize > latestPartitionIndex
                                       ? latestPartitionSize - latestPartitionIndex
                                       : 0;
-        // // Re-balance: Find a better partition
-        // if (latestPartitionSize - latestPartitionIndex < CONSUMER_BATCH_SIZE) {
-        //     size_t nextPartitionIndex = partitionIndex;
-        //     for (size_t i = 0; i < mq->partitions.size(); i++) {
-        //         size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
-        //         size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
-        //         size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
-        //         size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
-        //                                             ? candidateQueueSize - candidateQueueIndex
-        //                                             : 0;
-        //         if (candidateAvailableLogs > maxAvailableLogs) {
-        //             nextPartitionIndex = candidateIndex;
-        //             maxAvailableLogs = candidateAvailableLogs;
-        //         }
-        //     }
-        //     partitionIndex = nextPartitionIndex;
-        // }
+        // Re-balance: Find a better partition
+        if (latestPartitionSize - latestPartitionIndex < CONSUMER_BATCH_SIZE) {
+            size_t nextPartitionIndex = partitionIndex;
+            for (size_t i = 0; i < mq->partitions.size(); i++) {
+                size_t candidateIndex = (partitionIndex + i) % mq->partitions.size();
+                size_t candidateQueueSize = mq->partitions[candidateIndex].queue.size();
+                size_t candidateQueueIndex = mq->partitions[candidateIndex].consumerIndex;
+                size_t candidateAvailableLogs = candidateQueueSize > candidateQueueIndex
+                                                    ? candidateQueueSize - candidateQueueIndex
+                                                    : 0;
+                if (candidateAvailableLogs > maxAvailableLogs) {
+                    nextPartitionIndex = candidateIndex;
+                    maxAvailableLogs = candidateAvailableLogs;
+                }
+            }
+            partitionIndex = nextPartitionIndex;
+        }
     }
+    manager.broadcast();
     return nullptr;
 }
 
@@ -233,7 +235,7 @@ int main(int argc, char *argv[]) {
         partition.indexMutex = PTHREAD_MUTEX_INITIALIZER;
         partition.cond_produce = PTHREAD_COND_INITIALIZER;
         partition.cond_consume = PTHREAD_COND_INITIALIZER;
-        partition.queue.reserve(10000000);
+        partition.queue.reserve(40000000 / NUM_PARTITIONS);
     }
 
     MessageQueue messageQueue{partitions};
