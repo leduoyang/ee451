@@ -19,10 +19,11 @@ std::atomic<int> NUM_PRODUCERS_FINISHED(0);
 pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
-int PRODUCER_BATCH_SIZE = 1000;
-int CONSUMER_BATCH_SIZE = 100;
+int PRODUCER_BATCH_SIZE = 10000;
+int CONSUMER_BATCH_SIZE = 10000;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
+std::chrono::duration<double> producerWaitDuration;
 std::chrono::duration<double> waitDuration;
 
 std::vector<std::string> globalLogs;
@@ -97,11 +98,14 @@ public:
         // partitionNum[partitionIndex] += dataBatch.size();
         // pthread_mutex_unlock(&partitionCollectorMutex);
         Partition &partition = partitions[partitionIndex];
+        auto waitStart = std::chrono::high_resolution_clock::now();
         pthread_mutex_lock(&partition.queueMutex);
+        auto waitEnd = std::chrono::high_resolution_clock::now();
         for (const auto &log: dataBatch) {
             partition.queue.push_back(log);
         }
         pthread_mutex_unlock(&partition.queueMutex);
+        producerWaitDuration += (waitEnd - waitStart);
         //pthread_cond_signal(&partition.cond_consume);
         pthread_cond_broadcast(&partition.cond_consume);
     }
@@ -226,8 +230,8 @@ int main(int argc, char *argv[]) {
     std::cout << "number of producers: " << NUM_PRODUCERS << "\n";
     std::cout << "number of consumers: " << NUM_CONSUMERS << "\n";
     std::cout << "number of partitions: " << NUM_PARTITIONS << "\n";
-    std::cout << "producer batch size: " << PRODUCER_BATCH_SIZE << "\n";
-    std::cout << "consumer batch size: " << CONSUMER_BATCH_SIZE << "\n";
+    // std::cout << "producer batch size: " << PRODUCER_BATCH_SIZE << "\n";
+    // std::cout << "consumer batch size: " << CONSUMER_BATCH_SIZE << "\n";
 
     std::vector<Partition> partitions(NUM_PARTITIONS);
     for (auto &partition: partitions) {
@@ -273,23 +277,24 @@ int main(int argc, char *argv[]) {
     size_t log_size = globalLogs.size();
     double throughput = log_size / elapsed.count();
     double latency = elapsed.count() / log_size;
-    std::cout << "Serial Elapsed Time (loading data): " << loadingElapsed.count() << " seconds\n";
+    // std::cout << "Serial Elapsed Time (loading data): " << loadingElapsed.count() << " seconds\n";
     std::cout << "Parallel Elapsed Time: " << elapsed.count() << " seconds\n";
-    std::cout << "Overall Elapsed Time: " << loadingElapsed.count() + elapsed.count() << " seconds\n";
-    std::cout << "Throughput: " << throughput << " operations/second\n";
-    std::cout << "Latency: " << latency << " seconds/operation\n";
-    int count = 0;
-    for (auto &partition: partitions) {
-        std::cout << "Partition has: " << partition.queue.size() << " elements.\n";
-        count += partition.queue.size();
-    }
-    std::cout << "total has " << count << " elements.\n";
-    count = 0;
-    for (size_t i = 0; i < consumerNum.size(); ++i) {
-        // std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
-        count += consumerNum[i];
-    }
-    std::cout << "total has " << count << " elements.\n";
-    std::cout << "total time spent on waiting " << waitDuration.count() << " seconds\n";
+    // std::cout << "Overall Elapsed Time: " << loadingElapsed.count() + elapsed.count() << " seconds\n";
+    // std::cout << "Throughput: " << throughput << " operations/second\n";
+    // std::cout << "Latency: " << latency << " seconds/operation\n";
+    // int count = 0;
+    // for (auto &partition: partitions) {
+    //     std::cout << "Partition has: " << partition.queue.size() << " elements.\n";
+    //     count += partition.queue.size();
+    // }
+    // std::cout << "total has " << count << " elements.\n";
+    // count = 0;
+    // for (size_t i = 0; i < consumerNum.size(); ++i) {
+    //     // std::cout << "Consumer " << i << " completes " << consumerNum[i] << " elements.\n";
+    //     count += consumerNum[i];
+    // }
+    // std::cout << "total has " << count << " elements.\n";
+    std::cout << "average time for producer spent on waiting " << producerWaitDuration.count() / NUM_PRODUCERS << " seconds\n";
+    std::cout << "average time for consumer spent on waiting " << waitDuration.count() / NUM_CONSUMERS << " seconds\n";
     return 0;
 }
