@@ -20,7 +20,7 @@ pthread_mutex_t producersFinishedMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t partitionCollectorMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int PRODUCER_BATCH_SIZE = 10000;
-int CONSUMER_BATCH_SIZE = 100;
+int CONSUMER_BATCH_SIZE = 10000;
 std::vector<int> partitionNum(NUM_PARTITIONS, 0);
 std::vector<int> consumerNum(NUM_CONSUMERS, 0);
 std::chrono::duration<double> producerWaitDuration;
@@ -106,8 +106,8 @@ public:
         }
         pthread_mutex_unlock(&partition.queueMutex);
         producerWaitDuration += (waitEnd - waitStart);
-        //pthread_cond_signal(&partition.cond_consume);
-        pthread_cond_broadcast(&partition.cond_consume);
+        pthread_cond_signal(&partition.cond_consume);
+        //pthread_cond_broadcast(&partition.cond_consume);
     }
 
     std::vector<std::string> retrieveBatchByIndex(int partitionIndex) {
@@ -136,6 +136,7 @@ public:
         for (size_t i = from; i < from + logsToRetrieve; ++i) {
             batch.push_back(partition.queue.at(i));
         }
+        pthread_cond_signal(&partition.cond_consume);
         return batch;
     }
 
