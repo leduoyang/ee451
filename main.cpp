@@ -113,18 +113,21 @@ public:
     std::vector<std::string> retrieveBatchByIndex(int partitionIndex) {
         std::vector<std::string> batch;
         Partition &partition = partitions[partitionIndex];
-        pthread_mutex_lock(&partition.indexMutex);
+        // pthread_mutex_lock(&partition.indexMutex);
+        pthread_mutex_lock(&partition.queueMutex);
         while (partition.queue.size() - partition.consumerIndex < CONSUMER_BATCH_SIZE) {
             if (NUM_PRODUCERS_FINISHED.load(std::memory_order_acquire) == NUM_PRODUCERS) {
                 if (partition.consumerIndex < partition.queue.size()) {
                     break;
                 }
-                pthread_mutex_unlock(&partition.indexMutex);
+                pthread_mutex_unlock(&partition.queueMutex);
+                // pthread_mutex_unlock(&partition.indexMutex);
                 return batch;
             }
             // std::cout << "busy waiting" << std::endl;
             auto waitStart = std::chrono::high_resolution_clock::now();
-            pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
+            // pthread_cond_wait(&partition.cond_consume, &partition.indexMutex);
+            pthread_cond_wait(&partition.cond_consume, &partition.queueMutex);
             auto waitEnd = std::chrono::high_resolution_clock::now();
             waitDuration += (waitEnd - waitStart);
         }
@@ -132,10 +135,11 @@ public:
         size_t availableLogs = partition.queue.size() - partition.consumerIndex;
         size_t logsToRetrieve = std::min(availableLogs, static_cast<size_t>(CONSUMER_BATCH_SIZE));
         partition.consumerIndex += logsToRetrieve;
-        pthread_mutex_unlock(&partition.indexMutex);
+        // pthread_mutex_unlock(&partition.indexMutex);
         for (size_t i = from; i < from + logsToRetrieve; ++i) {
             batch.push_back(partition.queue.at(i));
         }
+        pthread_mutex_unlock(&partition.queueMutex);
         return batch;
     }
 
